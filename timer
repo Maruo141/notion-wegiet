@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ジャーナリングタイマー</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        /* Notionのダークモードに対応 */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #191919; /* Notionのダークモード背景色に近似 */
+            }
+        }
+        #progress-circle {
+            transition: stroke-dashoffset 1s linear;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-[#191919] text-gray-800 dark:text-gray-200 flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-xs p-6 text-center">
+        <!-- タイトル -->
+        <h1 class="text-lg font-semibold text-gray-500 dark:text-gray-400">ジャーナリングタイマー</h1>
+        <h2 class="mt-1 text-xl font-bold text-gray-800 dark:text-gray-100">心を整える時間</h2>
+
+        <!-- 円形タイマー表示 -->
+        <div class="my-6 relative w-52 h-52 mx-auto">
+            <svg class="w-full h-full" viewBox="0 0 120 120">
+                <!-- 背景の円 -->
+                <circle cx="60" cy="60" r="54" fill="none" class="stroke-gray-200 dark:stroke-gray-700" stroke-width="10"/>
+                <!-- 進捗を示す円 -->
+                <circle id="progress-circle" cx="60" cy="60" r="54" fill="none" class="stroke-indigo-500" stroke-width="10" stroke-linecap="round" transform="rotate(-90 60 60)"/>
+                <!-- 時間表示テキスト -->
+                <text id="timer-text" x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" class="text-5xl font-bold fill-gray-900 dark:fill-white" style="font-variant-numeric: tabular-nums;">
+                    10:00
+                </text>
+            </svg>
+        </div>
+
+
+        <!-- 操作ボタン -->
+        <div class="w-full flex flex-col items-center space-y-3">
+            <button id="start-button" class="w-full py-3 font-medium text-gray-800 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 dark:focus:ring-offset-gray-800 transition-colors duration-200">
+                スタート
+            </button>
+            <div class="w-full flex space-x-3">
+                <button id="stop-button" class="w-full py-2 font-medium text-gray-700 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 dark:focus:ring-offset-gray-800 transition-colors duration-200">
+                    ストップ
+                </button>
+                <button id="reset-button" class="w-full py-2 font-medium text-gray-700 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 dark:focus:ring-offset-gray-800 transition-colors duration-200">
+                    リセット
+                </button>
+            </div>
+        </div>
+
+        <!-- ステータス表示 -->
+        <div id="status-message" class="mt-6 text-center font-medium h-12 hidden">
+             <p id="status-text" class="text-lg text-green-600 dark:text-green-400"></p>
+             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">心を静めて、思考を整理しましょう</p>
+        </div>
+    </div>
+
+    <script>
+        // DOM要素を取得
+        const timerText = document.getElementById('timer-text');
+        const progressCircle = document.getElementById('progress-circle');
+        const startButton = document.getElementById('start-button');
+        const stopButton = document.getElementById('stop-button');
+        const resetButton = document.getElementById('reset-button');
+        const statusMessageContainer = document.getElementById('status-message');
+        const statusText = document.getElementById('status-text');
+
+
+        // タイマーの初期設定（10分 = 600秒）
+        const INITIAL_TIME = 600;
+        let timeLeft = INITIAL_TIME;
+        let timerId = null; // setIntervalのIDを格納
+        let isRunning = false;
+
+        // 円周の長さを計算
+        const radius = progressCircle.r.baseVal.value;
+        const circumference = 2 * Math.PI * radius;
+        progressCircle.style.strokeDasharray = circumference;
+        
+        // 時間を MM:SS 形式にフォーマットする関数
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        // タイマー表示を更新する関数
+        function updateDisplay() {
+            timerText.textContent = formatTime(timeLeft);
+            const progress = timeLeft / INITIAL_TIME;
+            const offset = circumference * (1 - progress);
+            progressCircle.style.strokeDashoffset = -offset;
+        }
+        
+        // アラーム音を再生する関数
+        function playAlarm() {
+            // AudioContextを使用してシンプルなビープ音を生成
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440Hzの音
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5); // 0.5秒間鳴らす
+        }
+
+        // スタートボタンの処理
+        startButton.addEventListener('click', () => {
+            if (isRunning || timeLeft <= 0) return;
+            
+            isRunning = true;
+            statusText.textContent = "ジャーナリング中...";
+            statusMessageContainer.classList.remove('hidden');
+            progressCircle.style.transition = 'stroke-dashoffset 1s linear';
+
+
+            timerId = setInterval(() => {
+                timeLeft--;
+                updateDisplay();
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerId);
+                    isRunning = false;
+                    statusText.textContent = "お疲れ様でした！";
+                    playAlarm();
+                }
+            }, 1000);
+        });
+
+        // ストップボタンの処理
+        stopButton.addEventListener('click', () => {
+            if (!isRunning) return;
+
+            clearInterval(timerId);
+            isRunning = false;
+            statusMessageContainer.classList.add('hidden');
+        });
+
+        // リセットボタンの処理
+        resetButton.addEventListener('click', () => {
+            clearInterval(timerId);
+            isRunning = false;
+            timeLeft = INITIAL_TIME;
+            
+            // アニメーションを無効にしてリセット
+            progressCircle.style.transition = 'none';
+            updateDisplay();
+            
+            statusMessageContainer.classList.add('hidden');
+            statusText.textContent = "ジャーナリング中...";
+        });
+        
+        // 初期表示
+        updateDisplay();
+    </script>
+</body>
+</html>
+
