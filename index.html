@@ -21,7 +21,22 @@
             }
         }
         #progress-circle {
-            transition: stroke-dashoffset 1s linear;
+            transition: stroke-dashoffset 1s linear, stroke 1s linear;
+        }
+        .time-btn {
+            border: 1px solid #e5e7eb; /* gray-200 */
+        }
+        .dark .time-btn {
+            border: 1px solid #374151; /* gray-700 */
+        }
+        .active-time-button {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+            border-color: #4f46e5;
+        }
+        .dark .active-time-button {
+            background-color: #6366f1; /* indigo-500 */
+            border-color: #6366f1;
         }
     </style>
 </head>
@@ -32,6 +47,13 @@
         <h1 class="text-lg font-semibold text-gray-500 dark:text-gray-400">ジャーナリングタイマー</h1>
         <h2 class="mt-1 text-xl font-bold text-gray-800 dark:text-gray-100">心を整える時間</h2>
 
+        <!-- 時間選択ボタン -->
+        <div id="time-selector" class="flex justify-center space-x-2 my-4">
+            <button data-time="180" class="time-btn px-4 py-1 text-sm rounded-full transition-colors">3分</button>
+            <button data-time="300" class="time-btn px-4 py-1 text-sm rounded-full transition-colors">5分</button>
+            <button data-time="600" class="time-btn px-4 py-1 text-sm rounded-full transition-colors active-time-button">10分</button>
+        </div>
+
         <!-- 円形タイマー表示 -->
         <div class="my-6 relative w-52 h-52 mx-auto">
             <svg class="w-full h-full" viewBox="0 0 120 120">
@@ -40,7 +62,7 @@
                 <!-- 進捗を示す円 -->
                 <circle id="progress-circle" cx="60" cy="60" r="54" fill="none" class="stroke-indigo-500" stroke-width="10" stroke-linecap="round" transform="rotate(-90 60 60)"/>
                 <!-- 時間表示テキスト -->
-                <text id="timer-text" x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" class="text-5xl font-bold fill-gray-900 dark:fill-white" style="font-variant-numeric: tabular-nums;">
+                <text id="timer-text" x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" class="text-4xl font-bold fill-gray-900 dark:fill-white" style="font-variant-numeric: tabular-nums;">
                     10:00
                 </text>
             </svg>
@@ -78,11 +100,12 @@
         const resetButton = document.getElementById('reset-button');
         const statusMessageContainer = document.getElementById('status-message');
         const statusText = document.getElementById('status-text');
+        const timeSelector = document.getElementById('time-selector');
+        const timeButtons = timeSelector.querySelectorAll('.time-btn');
 
-
-        // タイマーの初期設定（10分 = 600秒）
-        const INITIAL_TIME = 600;
-        let timeLeft = INITIAL_TIME;
+        // タイマーの初期設定
+        let initialTime = 600; // デフォルトは10分
+        let timeLeft = initialTime;
         let timerId = null; // setIntervalのIDを格納
         let isRunning = false;
 
@@ -98,30 +121,72 @@
             return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
 
+        // プログレスバーの色を更新する関数
+        function updateColor() {
+            const percentage = (timeLeft / initialTime) * 100;
+            progressCircle.classList.remove('stroke-indigo-500', 'stroke-amber-500', 'stroke-red-500');
+
+            if (percentage > 50) { // 残り50%以上
+                progressCircle.classList.add('stroke-indigo-500');
+            } else if (percentage > 20) { // 残り20%〜50%
+                progressCircle.classList.add('stroke-amber-500');
+            } else { // 残り20%未満
+                progressCircle.classList.add('stroke-red-500');
+            }
+        }
+
         // タイマー表示を更新する関数
         function updateDisplay() {
             timerText.textContent = formatTime(timeLeft);
-            const progress = timeLeft / INITIAL_TIME;
+            const progress = timeLeft / initialTime;
             const offset = circumference * (1 - progress);
             progressCircle.style.strokeDashoffset = -offset;
+            if (isRunning) {
+                updateColor();
+            }
         }
         
+        // タイマーをリセットする共通関数
+        function resetTimer(newTimeInSeconds) {
+            clearInterval(timerId);
+            isRunning = false;
+            
+            initialTime = newTimeInSeconds;
+            timeLeft = initialTime;
+            
+            progressCircle.style.transition = 'none'; // アニメーションを一時的に無効化
+            updateDisplay();
+            
+            progressCircle.classList.remove('stroke-amber-500', 'stroke-red-500');
+            progressCircle.classList.add('stroke-indigo-500');
+            
+            statusMessageContainer.classList.add('hidden');
+            statusText.textContent = "ジャーナリング中...";
+        }
+
+        // 時間選択ボタンの処理
+        timeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const selectedTime = parseInt(button.dataset.time, 10);
+                resetTimer(selectedTime);
+
+                timeButtons.forEach(btn => btn.classList.remove('active-time-button'));
+                button.classList.add('active-time-button');
+            });
+        });
+
         // アラーム音を再生する関数
         function playAlarm() {
-            // AudioContextを使用してシンプルなビープ音を生成
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
-
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440Hzの音
+            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
             gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-
             oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5); // 0.5秒間鳴らす
+            oscillator.stop(audioContext.currentTime + 0.5);
         }
 
         // スタートボタンの処理
@@ -131,8 +196,8 @@
             isRunning = true;
             statusText.textContent = "ジャーナリング中...";
             statusMessageContainer.classList.remove('hidden');
-            progressCircle.style.transition = 'stroke-dashoffset 1s linear';
-
+            progressCircle.style.transition = 'stroke-dashoffset 1s linear, stroke 1s linear';
+            updateColor(); // スタート時に色を初期設定
 
             timerId = setInterval(() => {
                 timeLeft--;
@@ -150,7 +215,6 @@
         // ストップボタンの処理
         stopButton.addEventListener('click', () => {
             if (!isRunning) return;
-
             clearInterval(timerId);
             isRunning = false;
             statusMessageContainer.classList.add('hidden');
@@ -158,16 +222,7 @@
 
         // リセットボタンの処理
         resetButton.addEventListener('click', () => {
-            clearInterval(timerId);
-            isRunning = false;
-            timeLeft = INITIAL_TIME;
-            
-            // アニメーションを無効にしてリセット
-            progressCircle.style.transition = 'none';
-            updateDisplay();
-            
-            statusMessageContainer.classList.add('hidden');
-            statusText.textContent = "ジャーナリング中...";
+            resetTimer(initialTime); // 現在選択されている時間でリセット
         });
         
         // 初期表示
